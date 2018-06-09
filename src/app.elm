@@ -4,6 +4,7 @@ import Html exposing (..)
 import Html.Events exposing (..)
 import Html.Attributes exposing (..)
 import Array exposing (..)
+import Random exposing (..)
 
 
 main : Program Never Model Msg
@@ -16,12 +17,20 @@ main =
 
 
 type alias Model =
-    { genomeCopy : Int, ctAmount : Int, cycleThresholdArray : Array Float, cycleCuttof : Int, positivePercentage : Float }
+    { genomeCopy : Int
+    , ctAmount : Int
+    , cycleThresholdArray : Array Float
+    , bootstrappedData : Array Float
+    , cycleCuttof : Int
+    , positivePercentage : Float
+    , bootstrapAmount : Int
+    , randomIndexList : List Int
+    }
 
 
 init : ( Model, Cmd Msg )
 init =
-    ( Model 0 0 Array.empty 40 0, Cmd.none )
+    ( Model 0 0 Array.empty Array.empty 40 0 100 [], Cmd.none )
 
 
 
@@ -34,6 +43,8 @@ type Msg
     | CycleThresholdInputChange Int String
     | CycleCuttofInputChange String
     | CycleThresholdArrayChanged (Array Float)
+    | BootstrapValueChange String
+    | NewRandomList (List Int)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -54,6 +65,9 @@ update msg model =
                 cycleThresholdArray =
                     Array.set index (convertToFloat newSample) model.cycleThresholdArray
 
+                bootstrapData =
+                    generate
+
                 positivePercentage =
                     calculatePositivePercentage cycleThresholdArray model.cycleCuttof
             in
@@ -65,12 +79,32 @@ update msg model =
                     convertToInt newCutoff
 
                 positivePercentage =
-                    calculatePositivePercentage model.cycleThresholdArray newCycleCuttoff
+                    calculatePositivePercentage model.bootstrappedData newCycleCuttoff
             in
                 ( { model | cycleCuttof = newCycleCuttoff, positivePercentage = positivePercentage }, Cmd.none )
 
         CycleThresholdArrayChanged array ->
-            ( { model | positivePercentage = calculatePositivePercentage model.cycleThresholdArray model.cycleCuttof }, Cmd.none )
+            ( model, Cmd.none )
+
+        BootstrapValueChange newBootstrapValueString ->
+            let
+                newAmount =
+                    convertToInt newBootstrapValueString
+
+                maxIndex =
+                    ((Array.length model.cycleThresholdArray) - 1)
+            in
+                ( { model | bootstrapAmount = newAmount }, Random.generate NewRandomList (generateRandomIndexList newAmount maxIndex) )
+
+        NewRandomList list ->
+            let
+                bootstrapData =
+                    (generateBootstrap list model.cycleThresholdArray)
+
+                positivePercentage =
+                    calculatePositivePercentage bootstrapData model.cycleCuttof
+            in
+                ( { model | bootstrappedData = bootstrapData, positivePercentage = positivePercentage }, Cmd.none )
 
 
 convertToInt : String -> Int
@@ -113,6 +147,26 @@ passesTest sample threshold =
         False
 
 
+generateRandomIndexList : Int -> Int -> Random.Generator (List Int)
+generateRandomIndexList len maxNumber =
+    Random.list len (Random.int 0 maxNumber)
+
+
+generateBootstrap : List Int -> Array Float -> Array Float
+generateBootstrap list floatArray =
+    Array.fromList (List.map (\i -> getArrayElem i floatArray) list)
+
+
+getArrayElem : Int -> Array Float -> Float
+getArrayElem index array =
+    case Array.get index array of
+        Just val ->
+            val
+
+        Nothing ->
+            0
+
+
 
 -- VIEW
 
@@ -125,15 +179,20 @@ view model =
             , input [ type_ "text", placeholder "GC number", onInput GCInputChange ] [ text (toString model.genomeCopy) ]
             ]
         , div []
-            [ label [] [ text "ct amount:" ]
-            , input [ type_ "text", placeholder "CT Amoutn", onInput CTAmountChanged ] [ text (toString model.ctAmount) ]
-            ]
-        , div []
             [ label [] [ text "Cycle Cuttoff:" ]
             , input [ type_ "text", placeholder "Cycle cuttoff", onInput CycleCuttofInputChange ] [ text (toString model.cycleCuttof) ]
             ]
+        , div []
+            [ label [] [ text "Bootstrap Amount:" ]
+            , input [ type_ "text", placeholder "Bootstrap Amount", onInput BootstrapValueChange ] [ text (toString model.bootstrapAmount) ]
+            ]
+        , div []
+            [ label [] [ text "Cycle Threshold Amount:" ]
+            , input [ type_ "text", placeholder "CT Amount", onInput CTAmountChanged ] [ text (toString model.ctAmount) ]
+            ]
         , div [] (generateTupleList model)
-        , div [] [ (text (toString model.positivePercentage)) ]
+        , div [] [ (text ("Positive Percentage: " ++ (toString model.positivePercentage))) ]
+        , div [] (viewRandomList model.bootstrappedData)
         ]
 
 
@@ -150,6 +209,11 @@ generateTupleList model =
             )
             model.cycleThresholdArray
         )
+
+
+viewRandomList : Array Float -> List (Html Msg)
+viewRandomList array =
+    Array.toList (Array.indexedMap (\i value -> div [] [ text (toString (value)) ]) array)
 
 
 
