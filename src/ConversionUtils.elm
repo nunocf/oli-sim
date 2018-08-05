@@ -1,21 +1,21 @@
-module ConversionUtils exposing (convertToInt)
+module ConversionUtils exposing (convertToInt, convertToFloat)
 
 
-convertToInt : String -> Int -> Int
-convertToInt string fallback =
+convertToInt : String -> Int
+convertToInt string =
     case String.toInt string of
         Err msg ->
-            fallback
+            0
 
         Ok val ->
             val
 
 
-convertToFloat : String -> Float -> Float
-convertToFloat string fallback =
+convertToFloat : String -> Float
+convertToFloat string =
     case String.toFloat string of
         Err msg ->
-            fallback
+            0
 
         Ok val ->
             val
